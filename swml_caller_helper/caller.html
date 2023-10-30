@@ -1,0 +1,216 @@
+<html>
+  <head>
+    <title>SWML Debug</title>
+  </head>
+  <body>
+    <div>
+      <div id="statusIndicator"></div>
+      <div id="permissionIndicator"></div>
+      <div id="expiryIndicator"></div>
+
+      <audio id="callAudio"></audio>
+      <div id="callStatus"></div>
+      <div id="callTimer"></div>
+
+      <button id="makeCallButton" disabled>Make Call</button>
+      <button id="endCallButton" disabled>End Call</button>
+    </div>
+    <script src="https://cdn.signalwire.com/libs/js/relay/1.2.7/relay.min.js"></script>
+    <script>
+      "use strict";
+      //#region state store/mvc class
+      class State {
+        connected = false;
+        permission = false;
+        expired = false;
+
+        indicatorDOM = document.getElementById("statusIndicator");
+        permissionDOM = document.getElementById("permissionIndicator");
+        expiryIndicatorDOM = document.getElementById("expiryIndicator");
+
+        makeCallButtonDOM = document.getElementById("makeCallButton");
+        endCallButtonDOM = document.getElementById("endCallButton");
+
+        callAudioDOM = document.getElementById("callAudio");
+        callStatusDOM = document.getElementById("callStatus");
+        callTimerDOM = document.getElementById("callTimer");
+
+        call = null;
+
+        timerHandle = null;
+        startingTime = null;
+
+        constructor(relayClient = null) {
+          this.refresh();
+        }
+
+        startTimer() {
+          this.startingTime = Date.now();
+          const interval = setInterval(
+            function timer() {
+              console.log(this.startingTime);
+              console.log(Date.now() - this.startingTime);
+              this.callTimerDOM.innerText = secondsToHHMMSS(
+                (Date.now() - this.startingTime) / 1000
+              );
+            }.bind(this),
+            1000
+          );
+          this.timerHandle = interval;
+        }
+
+        endTimer() {
+          if (this.timerHandle !== null) {
+            clearInterval(this.timerHandle);
+            this.timerHandle = null;
+            this.startingTime = null;
+            this.callTimerDOM.innerText = "";
+          }
+        }
+        setConnected(val) {
+          this.connected = val;
+          this.refresh();
+        }
+        setPermission(val) {
+          this.permission = val;
+          this.refresh();
+        }
+        setCall(call = null) {
+          this.call = call;
+          this.refresh();
+        }
+        refresh() {
+          this.permissionDOM.innerText = this.permission
+            ? "✅ Microphone"
+            : "❌ No microphone";
+          this.indicatorDOM.innerText = this.connected
+            ? "✅ Connected "
+            : "❌ Not connected ";
+          this.expiryIndicatorDOM.innerHTML = this.expired
+            ? "❌ Token Expired <button onclick='window.location.reload();'>Refresh</button>"
+            : "✅ Token";
+          this.makeCallButtonDOM.disabled = !(
+            this.connected &&
+            this.permission &&
+            !this.expired
+          );
+
+          if (this.call !== null) {
+            this.makeCallButtonDOM.disabled = true;
+            this.endCallButtonDOM.disabled = false;
+            this.callStatusDOM.innerHTML = `
+            <p>
+            ${this.call.state}
+            </p>
+            <p>
+            Testing the number __AINUMBER__
+            </p>
+
+            `;
+          } else {
+            this.makeCallButtonDOM.disabled = false;
+            this.endCallButtonDOM.disabled = true;
+            this.callStatusDOM.innerText = "";
+          }
+        }
+      }
+      //#endregion
+
+      //#region entry point for program
+      const state = new State();
+
+      async function main() {
+        const client = await createClient();
+        setInterval(() => {
+          console.log(client.expired);
+          state.expired = client.expired;
+          state.refresh();
+        }, 2000);
+
+        const perm = await client.checkPermissions(true, false);
+        state.setPermission(perm);
+
+        state.makeCallButtonDOM.addEventListener("click", async () => {
+          createCall(client);
+        });
+        state.endCallButtonDOM.addEventListener("click", async () => {
+          await state.call?.hangup();
+          state.setCall(null);
+        });
+      }
+      main();
+      //#endregion
+
+      //#region Relay utils
+      async function createClient() {
+        const client = new Relay({
+          project: "__PROJECTID__",
+          token: "__TOKEN__",
+        });
+        client.iceServers = [{ urls: ["stun:stun.l.google.com:19302"] }];
+
+        client
+          .on("signalwire.ready", () => {
+            state.setConnected(true);
+          })
+          .on("signalwire.error", (e) => {
+            console.error(e);
+          })
+          .on("signalwire.notification", (n) => {
+            if (n.type === "callUpdate") {
+              const call = n.call;
+              state.setCall(call);
+
+              switch (call.state) {
+                case "active": // Call has become active
+                  state.startTimer();
+                  break;
+                case "hangup": // Call is over
+                  state.endTimer();
+                  state.setCall(null);
+                  break;
+                case "destroy": // Call has been destroyed
+                  state.setCall(null);
+                  break;
+              }
+            }
+          });
+
+        await client?.connect();
+        return client;
+      }
+
+      async function createCall(client) {
+        client.enableMicrophone();
+        const call = await client.newCall({
+          destinationNumber: "__AINUMBER__",
+          remoteElement: "callAudio",
+        });
+        state.setCall(call);
+        return call;
+      }
+      //#endregion
+
+      //#region general utils
+      function secondsToHHMMSS(totalSeconds) {
+        var hours = Math.floor(totalSeconds / 3600);
+        var minutes = Math.floor((totalSeconds - hours * 3600) / 60);
+        var seconds = totalSeconds - hours * 3600 - minutes * 60;
+
+        // Padding the values to ensure they are two digits
+        if (hours < 10) {
+          hours = "0" + hours;
+        }
+        if (minutes < 10) {
+          minutes = "0" + minutes;
+        }
+        if (seconds < 10) {
+          seconds = "0" + seconds;
+        }
+
+        return hours + ":" + minutes + ":" + Math.floor(seconds);
+      }
+      //#endregion
+    </script>
+  </body>
+</html>

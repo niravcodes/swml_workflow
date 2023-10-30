@@ -1,0 +1,85 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/olajhidey/swml-validator/master/schema/swml-schema.json
+
+version: 1.0.0
+sections:
+  main:
+    - label: ai
+      ai:
+        voice: en-US-Neural2-F
+        post_prompt_url: https://webhook.swrooms.com/b0a77ab4-4015-4cbc-b368-aeba2d06564a
+        prompt:
+          confidence: 0.6
+          temperature: 0.3
+          text: |
+            You are a support assistant. If they are calling for support, add or modify zendesk tickets
+            according to what they need. 
+
+            Call the appropriate functions according to their needs.
+
+            * Creating a new Zendesk ticket (summarized from their problem description)
+            * Querying about a particular zendesk ticket number
+            * Adding comments to the ticket just created or being queried
+            * Get the latest update to a particular zendesk ticket
+
+            Be concise.
+
+        SWAIG:
+          functions:
+            - function: create_zendesk_ticket
+              purpose: To create a new ZenDesk ticket given a subject and a body
+              argument:
+                type: object
+                properties:
+                  ticket:
+                    type: object
+                    properties:
+                      subject:
+                        type: string
+                        description: The subject of the ticket.
+                      body:
+                        type: string
+                        description: The body of the ticket.
+              data_map:
+                webhooks:
+                  - url: https://__SUBDOMAIN__.loca.lt/create_ticket
+                    method: POST
+                    params:
+                      body: "%{args.ticket.body}"
+                      subject: "%{args.ticket.subject}"
+                    output:
+                      response: Created ticket with ticket number %{ticket_number}
+
+            - function: retrieve_zendesk_ticket
+              purpose: To retrieve the contents of the tickets given a ticket number
+              argument:
+                type: object
+                properties:
+                  ticket_number:
+                    type: string
+                    description: The ticket number. This is a numeric value (like 12, 4)
+              data_map:
+                webhooks:
+                  - url: https://__SUBDOMAIN__.loca.lt/get_ticket/%{args.ticket_number}
+                    method: GET
+                    output:
+                      response: "{status:'%{ticket.status}', subject:'%{ticket.subject}', description:'%{ticket.description}'}"
+
+            - function: add_comment_to_ticket
+              purpose: To add a comment to the ticket in context
+              argument:
+                type: object
+                properties:
+                  ticket_number:
+                    type: string
+                    description: The ticket number. This is a numeric value (like 12, 4)
+                  comment:
+                    type: string
+                    description: The comment to add to the ticket
+              data_map:
+                webhooks:
+                  - url: https://__SUBDOMAIN__.loca.lt/add_comment/%{args.ticket_number}
+                    method: POST
+                    params:
+                      comment: "%{args.comment}"
+                    output:
+                      response: "created"
