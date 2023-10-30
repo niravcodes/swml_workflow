@@ -22,7 +22,7 @@ app.listen(port, () => {
 
 async function genYAML(subdomain) {
   const yaml = await fs.readFile(
-    path.join(__dirname, "YAML", "swmltest.yaml"),
+    path.join(__dirname, "YAML", "swml.yaml"),
     "utf-8"
   );
 

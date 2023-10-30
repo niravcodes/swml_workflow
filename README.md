@@ -93,9 +93,8 @@ to leave my code-editor window too much. They might help you do the same.
    npm install
    ```
 
-   This particular backend is written to serve the
-   ZenDesk support assistant, but this can be anything you
-   need it to be, if you need it at all.
+   This particular backend is written to serve the ZenDesk support assistant,
+   but this can be anything you need it to be, if you need it at all.
 
 ## Workflow
 
